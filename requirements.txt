@@ -17,7 +17,7 @@ pandas==2.3.3
 openpyxl==3.1.5
 sqlglot==27.28.1
 
-# Configuration and optional Gemini explanations
+# Configuration and Gemini follow-up question rewriting
 python-dotenv==1.1.1
 google-genai==1.47.0
 
