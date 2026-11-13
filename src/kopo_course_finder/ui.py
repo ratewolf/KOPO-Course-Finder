@@ -325,10 +325,18 @@ def build_app(conversation, metadata):
             trigger_mode="once",
         )
         apply_key.click(
-            set_key, [key, state], [state, key, key_status], api_name=False, queue=False
+            set_key,
+            [key, state],
+            [state, key, key_status],
+            api_name="set_key",
+            queue=False,
         )
         remove_key.click(
-            release_key, [state], [state, key, key_status], api_name=False, queue=False
+            release_key,
+            [state],
+            [state, key, key_status],
+            api_name="release_key",
+            queue=False,
         )
         gr.on(
             triggers=[clear.click, history.clear],
@@ -336,7 +344,7 @@ def build_app(conversation, metadata):
             inputs=[state],
             outputs=outputs + [question, new_query],
             cancels=[event],
-            api_name=False,
+            api_name="reset",
             queue=False,
         )
         app.unload(unload)
