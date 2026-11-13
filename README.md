@@ -83,6 +83,19 @@ SQLGlot 검증 → 읽기 전용 SQLite 조회
 
 빌드 정의를 Compose에 넣는 방식은 [Docker Compose의 `dockerfile_inline`](https://docs.docker.com/reference/compose-file/build/#dockerfile_inline)을 사용하므로 Compose 2.17 이상이 필요합니다. Docker Desktop은 WSL2 기반 Linux 컨테이너와 GPU 지원이 활성화되어 있어야 합니다.
 
+### VS Code에서 개발하기
+
+1. Docker Desktop을 실행하고 VS Code에 [Dev Containers 확장](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)을 설치합니다.
+2. VS Code에서 이 저장소 폴더를 엽니다.
+3. `Ctrl+Shift+P` → **Dev Containers: Reopen in Container**를 실행합니다.
+4. 컨테이너 준비와 확장 설치가 끝나면 통합 터미널에서 개발합니다. Python은 `/usr/local/bin/python`을 사용하며, 호스트 Python이나 별도 가상 환경은 필요하지 않습니다.
+
+`.devcontainer/devcontainer.json`은 기존 `compose.yaml`의 `app` 서비스를 사용합니다. GPU·작업 폴더·모델 캐시·포트 설정도 동일하게 적용됩니다. Python, Pylance, Python Debugger, Ruff, EditorConfig 확장을 자동 설치하고, Python 파일 저장 시 컨테이너에 설치한 Ruff로 포맷·수정·import 정리를 수행합니다. 컨테이너를 처음 만들 때는 `pip check`로 설치 상태를 확인합니다.
+
+실습실에 설치된 Dev Containers CLI 0.90은 `dockerfile_inline`을 직접 해석하지 못하므로, 연결 전에 루트 Compose 파일로 이미지를 빌드하고 `.devcontainer/compose.yaml`이 해당 이미지를 사용하도록 연결합니다. 빌드 내용과 GPU·볼륨·포트 정의는 루트 `compose.yaml`에서 관리하며, VS Code용 파일에는 이미지 연결 설정만 둡니다. 기존 이미지와 빌드 캐시를 재사용합니다.
+
+연결된 VS Code 터미널에서는 `python`, `ruff` 등을 바로 실행합니다. VS Code 창을 닫으면 해당 Compose 서비스를 중지하며, 작업 파일과 모델 캐시는 유지됩니다. `requirements.txt`나 컨테이너 설정을 변경한 뒤에는 **Dev Containers: Rebuild Container**로 반영합니다. 앱 실행과 브라우저 접속 방법은 아래와 같습니다.
+
 ### 환경 시작
 
 저장소 루트에서 실행합니다. 별도 설정이 없으면 `.env` 없이도 기본값을 사용합니다. 기존 `.env`가 있다면 새 `.env.example`의 설정과 비교해 필요한 항목만 갱신합니다.
@@ -210,6 +223,8 @@ Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에�
 | `compose.yaml` | 공통 GPU 개발 환경의 빌드·실행 설정 |
 | `requirements.txt` | Python 실행·GPU·개발 도구 의존성의 단일 목록 |
 | `.dockerignore` | Docker 빌드에 필요한 파일만 허용 |
+| `.devcontainer/devcontainer.json` | VS Code에서 공통 GPU 컨테이너에 연결하고 Python·Ruff 편집 환경 구성 |
+| `.devcontainer/compose.yaml` | Dev Containers에서 인라인 빌드 대신 준비된 개발 이미지를 사용하도록 연결 |
 
 Compose가 `.env`의 지정된 설정을 컨테이너 환경 변수로 전달합니다. 모델 추론과 SQL 제한 등 앱 설정은 향후 실행 코드에서 읽도록 구현할 예정이며, `.env`는 Git에서 제외됩니다.
 

@@ -1,0 +1,46 @@
+{
+  "name": "KOPO Course Finder (GPU)",
+  "dockerComposeFile": ["../compose.yaml", "compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "app",
+  "updateRemoteUserUID": false,
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+  "initializeCommand": [
+    "docker",
+    "compose",
+    "--project-directory",
+    "${localWorkspaceFolder}",
+    "-f",
+    "${localWorkspaceFolder}/compose.yaml",
+    "build",
+    "app"
+  ],
+  "postCreateCommand": ["python", "-m", "pip", "check"],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "EditorConfig.EditorConfig"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.extraPaths": ["/workspace/src"],
+        "ruff.path": ["/usr/local/bin/ruff"],
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+          }
+        }
+      }
+    }
+  }
+}

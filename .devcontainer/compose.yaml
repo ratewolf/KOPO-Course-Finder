@@ -1,0 +1,6 @@
+# CLI 0.90 cannot inspect dockerfile_inline; use the image built by initializeCommand.
+services:
+  app:
+    image: kopo-course-finder-app:latest
+    build: !reset null
+    pull_policy: never
