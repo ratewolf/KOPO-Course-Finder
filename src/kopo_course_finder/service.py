@@ -16,6 +16,7 @@ from .query import (
     execute_query,
     validate_sql,
 )
+from .summary import result_message
 
 
 class InputError(ValueError):
@@ -30,31 +31,19 @@ class Answer:
     generations: list
 
 
-def result_message(result):
-    if result.truncated:
-        return (
-            f"결과가 많아 {len(result.rows)}행까지만 표시합니다. 조건을 추가해 보세요."
-        )
-    if not result.rows:
-        return "조건에 맞는 강좌가 없습니다. 검색 조건을 확인해 주세요."
-    if result.aggregate:
-        return f"집계 결과 {len(result.rows)}행입니다. 집계 값은 결과 표에서 확인해 주세요."
-    return f"조회 결과 {len(result.rows)}행입니다."
-
-
 class QueryService:
     def __init__(self, settings, model=None):
         self.settings = settings
         self.model = model if model is not None else LocalSQLModel(settings)
 
-    def ask(self, question):
+    def ask(self, question, *, resolved=False):
         question = question.strip()
         if not question:
             raise InputError("질문을 입력해 주세요.")
         if len(question) > 2000:
             raise InputError("질문이 너무 깁니다. 2,000자 이내로 입력해 주세요.")
-        # Gemini 연결 전에는 생략 표현을 임의 해석하지 않는다.
-        if re.search(
+        # CLI 직접 호출에서는 생략 표현을 임의 해석하지 않는다.
+        if not resolved and re.search(
             r"그중|그럼|이전 결과|앞서|방금|그것|그 강좌|그 과목|은\s*\?|는\s*\?"
             r"|^(?:NCS|[12]학기|[12]학년)만",
             question,
