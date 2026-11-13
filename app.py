@@ -29,7 +29,7 @@ def main():
     app.queue(max_size=20).launch(
         show_error=False,
         show_api=False,
-        share=False,
+        share=True,
         blocked_paths=[
             str(root / name)
             for name in ("data", "docs", "outputs", ".env", ".git", ".cache")
