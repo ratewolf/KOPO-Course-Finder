@@ -1,6 +1,7 @@
 """Gradio 조회 화면. 데이터 적재·파일·키 조회 API는 노출하지 않는다."""
 
 import threading
+from pathlib import Path
 
 import gradio as gr
 import pandas as pd
@@ -131,75 +132,187 @@ def build_app(conversation, metadata):
         "2025년 1학기 학과별 강좌 수를 알려줘.",
         "연도별 NCS 강좌 비율을 보여줘.",
     ]
+    assets = Path(__file__).resolve().parents[2] / "assets"
+    css = (assets / "ui.css").read_text(encoding="utf-8")
+    logo = (assets / "polytech_logo.svg").read_text(encoding="utf-8")
+    year_range = f"{years[0]}–{years[-1]}" if years else "자료 없음"
+    theme = gr.themes.Base(
+        primary_hue="blue",
+        neutral_hue="slate",
+        font=["Pretendard", "Noto Sans KR", "Malgun Gothic", "sans-serif"],
+    )
     with gr.Blocks(
-        title="KOPO Course Finder", theme=gr.themes.Soft(), analytics_enabled=False
+        title="KOPO Course Finder", theme=theme, css=css, analytics_enabled=False
     ) as app:
         state = gr.State(value=Session(), time_to_live=1800, delete_callback=dispose)
-        gr.Markdown(
-            "# KOPO Course Finder\n서울정수캠퍼스 개설강좌를 질문으로 찾아보세요."
+        gr.HTML(
+            '<header class="site-brand"><div class="brand-lockup">'
+            f'<div class="brand-logo" aria-hidden="true">{logo}</div>'
+            "<div><strong>KOREA POLYTECHNICS</strong>"
+            "<small>한국폴리텍대학 서울정수캠퍼스 · 개설강좌 조회</small></div></div>"
+            '<span class="brand-tag">KOPO COURSE FINDER</span></header>',
+            elem_id="brand-header",
         )
-        gr.Markdown(
-            f"**수집 학년도:** {coverage} · **강좌:** {metadata['rows']:,}개\n\n"
-            "강좌는 분반 단위이며 교수명은 가명입니다. 학점·수강 인원·시간·강의실은 조회할 수 없습니다."
-        )
-        with gr.Accordion("조회 가능한 학과와 사용 방법", open=False):
-            gr.Markdown(" · ".join(metadata["departments"]))
-            gr.Markdown(
-                "연도·학기·학과를 함께 입력하면 더 정확합니다. 과목명 검색어는 따옴표로 감싸 주세요.\n\n"
-                "독립 질문에는 API 키가 필요하지 않습니다. 후속 질문은 마지막 성공 조회를 기준으로 해석합니다. "
-                "확인 질문에 답하는 중 새 검색을 하려면 ‘새 조회’를 선택하세요."
+        with gr.Column(elem_id="course-content"):
+            gr.HTML(
+                '<section class="hero-banner"><div class="hero-copy">'
+                '<div class="hero-eyebrow">COURSE FINDER</div>'
+                "<h1>어떤 강좌를<br>찾으시나요?</h1>"
+                "<p>궁금한 강좌를 질문하고, 이전 조회에 이어서 찾아보세요.</p></div>"
+                '<div class="hero-scope"><span>COURSE ARCHIVE</span>'
+                f"<strong>{metadata['rows']:,}개 강좌</strong>"
+                f"<small>{year_range}학년도 수집 자료</small><i></i></div></section>",
+                elem_id="hero",
             )
-        with gr.Accordion("Gemini 후속 질문 설정", open=False):
-            gr.Markdown(
-                "후속 질문 해석 시 현재 질문과 마지막 성공 질문·SQL·결과 메타데이터가 Google로 전송됩니다. "
-                "전체 결과 표와 원본 엑셀은 전송하지 않습니다. 키는 파일에 저장하지 않습니다."
+            with gr.Column(elem_id="search-card", elem_classes="course-card"):
+                gr.HTML(
+                    '<div class="section-head"><span>01</span><div>'
+                    "<h2>강좌에 대해 질문하기</h2>"
+                    "<p>연도, 학기, 학과를 함께 입력하면 더 정확하게 찾을 수 있어요.</p>"
+                    "</div></div>",
+                    elem_classes="section-heading",
+                )
+                with gr.Accordion(
+                    "조회 가능한 학과와 사용 방법",
+                    open=False,
+                    elem_classes="course-accordion",
+                ):
+                    gr.Markdown(
+                        f"**수집 학년도:** {coverage}\n\n"
+                        + " · ".join(metadata["departments"])
+                    )
+                    gr.Markdown(
+                        "과목명 검색어는 따옴표로 감싸 주세요. 강좌는 분반 단위이며 교수명은 가명입니다. "
+                        "학점·수강 인원·시간·강의실은 조회할 수 없습니다.\n\n"
+                        "독립 질문에는 API 키가 필요하지 않습니다. 후속 질문은 마지막 성공 조회를 기준으로 해석합니다. "
+                        "확인 질문에 답하는 중 새 검색을 하려면 ‘새 조회’를 선택하세요."
+                    )
+                with gr.Accordion(
+                    "Gemini 후속 질문 설정",
+                    open=False,
+                    elem_id="ai-settings",
+                    elem_classes="course-accordion",
+                ):
+                    gr.Markdown(
+                        "후속 질문 해석 시 현재 질문과 마지막 성공 질문·SQL·결과 메타데이터가 Google로 전송됩니다. "
+                        "전체 결과 표와 원본 엑셀은 전송하지 않습니다. 키는 파일에 저장하지 않습니다."
+                    )
+                    key = gr.Textbox(
+                        label="Gemini API 키",
+                        type="password",
+                        max_length=512,
+                        elem_classes="course-field",
+                    )
+                    with gr.Row():
+                        apply_key = gr.Button("키 적용", elem_classes="course-button")
+                        remove_key = gr.Button("키 해제", elem_classes="course-button")
+                    key_status = gr.Textbox(
+                        label="키 상태",
+                        value="키가 없습니다. 독립 질문은 조회할 수 있습니다.",
+                        interactive=False,
+                        elem_classes="course-field",
+                    )
+                question = gr.Textbox(
+                    label="질문",
+                    placeholder="2025년 인공지능소프트웨어과의 모든 개설강좌를 알려줘.",
+                    lines=2,
+                    max_length=2000,
+                    elem_id="question-input",
+                    elem_classes="course-field",
+                )
+                gr.Examples(
+                    examples=[[value] for value in examples],
+                    inputs=question,
+                    cache_examples=False,
+                    label="예시 질문",
+                    elem_id="examples",
+                )
+                with gr.Row(elem_id="query-actions"):
+                    new_query = gr.Checkbox(
+                        label="새 조회 (이전 조건 사용 안 함)",
+                        value=False,
+                        elem_id="new-query",
+                    )
+                    run = gr.Button(
+                        "조회",
+                        variant="primary",
+                        elem_id="lookup-button",
+                        elem_classes="course-button",
+                    )
+                    clear = gr.Button(
+                        "대화 및 결과 초기화", elem_classes="course-button"
+                    )
+            with gr.Column(elem_id="results-card", elem_classes="course-card"):
+                gr.HTML(
+                    '<div class="section-head"><span>02</span><div><h2>조회 결과</h2>'
+                    "<p>실제 데이터와 실행한 SQL을 함께 확인하세요. 결과는 최대 200행까지 표시합니다.</p>"
+                    "</div></div>",
+                    elem_classes="section-heading",
+                )
+                status = gr.Textbox(
+                    label="처리 상태",
+                    value="준비",
+                    interactive=False,
+                    elem_id="runtime-status",
+                    elem_classes="course-field",
+                )
+                message = gr.Textbox(
+                    label="결과 안내",
+                    value="질문을 입력하거나 예시 질문을 선택한 뒤 조회해 주세요.",
+                    interactive=False,
+                    lines=2,
+                    elem_id="result-summary",
+                    elem_classes="course-field",
+                )
+                with gr.Row(elem_id="question-details"):
+                    original = gr.Textbox(
+                        label="사용자 원문",
+                        interactive=False,
+                        elem_classes="course-field",
+                    )
+                    rewritten = gr.Textbox(
+                        label="SQL 모델에 전달한 질문",
+                        interactive=False,
+                        elem_classes="course-field",
+                    )
+                table = gr.Dataframe(
+                    label="조회 결과",
+                    interactive=False,
+                    wrap=True,
+                    show_copy_button=True,
+                    max_height=420,
+                    elem_id="course-table",
+                )
+                with gr.Accordion(
+                    "실행한 SQL", open=False, elem_classes="course-accordion"
+                ):
+                    sql = gr.Code(
+                        language="sql",
+                        label="SQL",
+                        interactive=False,
+                        elem_id="sql-code",
+                    )
+            with gr.Column(elem_classes="course-card"):
+                gr.HTML(
+                    '<div class="section-head"><span>03</span><div><h2>검색 기록</h2>'
+                    "<p>지금까지의 질문과 안내를 확인하세요.</p></div></div>",
+                    elem_classes="section-heading",
+                )
+                history = gr.Chatbot(
+                    label="검색 기록",
+                    type="messages",
+                    height=300,
+                    sanitize_html=True,
+                    render_markdown=False,
+                    allow_file_downloads=False,
+                    elem_id="search-history",
+                    show_label=False,
+                )
+            gr.HTML(
+                '<footer class="site-footer"><strong>KOPO COURSE FINDER</strong>'
+                "<span>서울정수캠퍼스 개설강좌 조회 · 교수명은 가명으로 표시됩니다.</span></footer>",
+                elem_id="page-footer",
             )
-            key = gr.Textbox(label="Gemini API 키", type="password", max_length=512)
-            with gr.Row():
-                apply_key = gr.Button("키 적용")
-                remove_key = gr.Button("키 해제")
-            key_status = gr.Textbox(
-                label="키 상태",
-                value="키가 없습니다. 독립 질문은 조회할 수 있습니다.",
-                interactive=False,
-            )
-        question = gr.Textbox(
-            label="질문",
-            placeholder="2025년 인공지능소프트웨어과의 모든 개설강좌를 알려줘.",
-            lines=2,
-            max_length=2000,
-        )
-        gr.Examples(
-            examples=[[value] for value in examples],
-            inputs=question,
-            cache_examples=False,
-        )
-        with gr.Row():
-            new_query = gr.Checkbox(label="새 조회 (이전 조건 사용 안 함)", value=False)
-            run = gr.Button("조회", variant="primary")
-            clear = gr.Button("대화 및 결과 초기화")
-        status = gr.Textbox(label="처리 상태", value="준비", interactive=False)
-        message = gr.Textbox(label="결과 안내", interactive=False, lines=3)
-        with gr.Row():
-            original = gr.Textbox(label="사용자 원문", interactive=False)
-            rewritten = gr.Textbox(label="SQL 모델에 전달한 질문", interactive=False)
-        table = gr.Dataframe(
-            label="조회 결과",
-            interactive=False,
-            wrap=True,
-            show_copy_button=True,
-            max_height=420,
-        )
-        with gr.Accordion("실행한 SQL", open=False):
-            sql = gr.Code(language="sql", label="SQL", interactive=False)
-        history = gr.Chatbot(
-            label="검색 기록",
-            type="messages",
-            height=300,
-            sanitize_html=True,
-            render_markdown=False,
-            allow_file_downloads=False,
-        )
         outputs = [state, history, message, original, rewritten, table, sql, status]
         event = gr.on(
             triggers=[run.click, question.submit],
