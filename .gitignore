@@ -1,0 +1,65 @@
+# Private planning documents and source data
+/docs/
+/data/
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+
+# Local environment settings (only the root example is public)
+.env
+.env.*
+!/.env.example
+
+# Python environments, caches, and build output
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.python-version.local
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+.eggs/
+/build/
+/dist/
+
+# Local databases and SQLite journal files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Downloaded models and local caches
+/models/
+/checkpoints/
+.cache/
+.huggingface/
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+pytorch_model*.bin
+adapter_model*.bin
+
+# Generated results and logs
+/outputs/
+/logs/
+*.log
+
+# Local editor and operating system files
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
