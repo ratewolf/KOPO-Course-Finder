@@ -51,6 +51,8 @@ adapter_model*.bin
 # Generated results and logs
 /outputs/
 /logs/
+/.gradio/
+/gradio_cached_examples/
 *.log
 
 # Local editor and operating system files

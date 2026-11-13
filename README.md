@@ -2,7 +2,7 @@
 
 한국어 자연어 질문으로 **한국폴리텍대학 서울정수캠퍼스의 역대 개설강좌를 조회**하는 프로젝트입니다. Text-to-SQL 모델로 질문을 SQL로 변환하고, 데이터베이스에서 조회한 결과를 표와 실행한 SQL로 보여주는 것을 목표로 합니다.
 
-> 현재 기획·설계 단계입니다. 아래 기능과 기술 구성은 구현 계획이며, 실행 코드와 설치·실행 방법은 구현 후 추가할 예정입니다.
+> 현재 공통 GPU 개발 환경을 준비한 단계입니다. 강좌 조회 앱은 아직 구현 전이며, 아래 서비스 기능은 구현 계획입니다.
 
 ## 프로젝트 배경
 
@@ -60,9 +60,9 @@ SQLGlot 검증 → 읽기 전용 SQLite 조회
 | 역할 | 기술 |
 | --- | --- |
 | 개발 언어 | Python |
-| 기반 모델 | `unsloth/Meta-Llama-3.1-8B-Instruct` |
+| 기반 모델 | `unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit` |
 | 한국어 SQL LoRA 어댑터 | `huggingface-KREW/Llama-3.1-8B-Spider-SQL-Ko` |
-| 모델 실행 | Transformers, PEFT, bitsandbytes 또는 Unsloth를 이용한 4bit 양자화 |
+| 모델 실행 | PyTorch, Transformers, PEFT, bitsandbytes를 이용한 4bit 추론 |
 | 데이터 적재 | openpyxl, SQLite |
 | SQL 검증 | SQLGlot |
 | 조회 화면 및 서버 | Gradio |
@@ -70,7 +70,51 @@ SQLGlot 검증 → 읽기 전용 SQLite 조회
 | 선택적 결과 해설 | Gemini API |
 | 개발·실행 환경 | Docker, 로컬 NVIDIA GPU 환경 |
 
-모델 구동에 필요한 자원과 라이브러리 버전은 실제 실행 검증 후 명시할 예정입니다.
+기반 모델은 SQL 어댑터의 [adapter_config.json](https://huggingface.co/huggingface-KREW/Llama-3.1-8B-Spider-SQL-Ko/blob/11d1e533ccbe48c9135baeba83a16205ca4ca251/adapter_config.json)에 지정된 사전 양자화 모델을 사용합니다. Unsloth 라이브러리는 별도로 설치하지 않고 Transformers와 PEFT로 불러올 계획입니다.
+
+## 공통 개발 환경
+
+실습실의 Windows + WSL2 + Docker Desktop + RTX 3080 10GB 환경을 기준으로 합니다. 컨테이너는 Linux x86_64, Python 3.11.14, PyTorch 2.6.0 + CUDA 12.4를 사용합니다.
+
+- Docker 빌드·GPU 설정·볼륨·포트는 **`compose.yaml` 하나**에서 관리합니다. 별도 Dockerfile이나 CPU/GPU 오버라이드 파일은 사용하지 않습니다.
+- Python의 실행·GPU 추론·개발 도구 의존성은 **`requirements.txt` 하나**에서 관리합니다. 상단에는 직접 사용하는 패키지를 용도별로, 하단에는 전이 의존성을 고정해 정리합니다.
+- `.dockerignore`는 빌드에 `requirements.txt`만 허용합니다. 소스와 로컬 데이터는 실행 시 작업 폴더를 연결해 사용합니다.
+- `.env`는 필요한 설정을 바꿀 때 사용하며, API 키는 포함하지 않습니다.
+
+빌드 정의를 Compose에 넣는 방식은 [Docker Compose의 `dockerfile_inline`](https://docs.docker.com/reference/compose-file/build/#dockerfile_inline)을 사용하므로 Compose 2.17 이상이 필요합니다. Docker Desktop은 WSL2 기반 Linux 컨테이너와 GPU 지원이 활성화되어 있어야 합니다.
+
+### 환경 시작
+
+저장소 루트에서 실행합니다. 별도 설정이 없으면 `.env` 없이도 기본값을 사용합니다. 기존 `.env`가 있다면 새 `.env.example`의 설정과 비교해 필요한 항목만 갱신합니다.
+
+```powershell
+docker compose config --quiet
+docker compose up -d --build
+docker compose exec app bash
+```
+
+새 로컬 설정 파일이 필요한 경우에만 `.env.example`을 `.env`로 복사합니다. 기존 `.env`는 덮어쓰지 않습니다.
+
+현재 컨테이너는 개발 작업을 위해 대기하며, 웹 서버를 자동 실행하지 않습니다. 향후 `app.py`를 구현한 뒤 다음 명령으로 실행할 예정입니다.
+
+```powershell
+docker compose exec app python app.py
+```
+
+실행 후 접속 주소는 `http://127.0.0.1:7860`입니다. 호스트에는 루프백 주소로만 포트를 열고, 컨테이너 내부의 Gradio는 `0.0.0.0:7860`에서 연결을 받도록 설정했습니다.
+
+### 환경 확인과 종료
+
+```powershell
+docker compose exec app python -m pip check
+docker compose exec app python -c "import torch; print(torch.__version__, torch.version.cuda); print(torch.cuda.get_device_name(0))"
+docker compose exec app ruff check .
+docker compose down
+```
+
+의존성을 변경했을 때는 이미지를 다시 빌드합니다. Python 소스 수정은 연결된 작업 폴더에 바로 반영되며, 실행 중인 앱의 재시작은 별도로 필요합니다. Hugging Face 모델 캐시는 이름 있는 볼륨에 보관되므로 일반적인 `docker compose down` 후에도 유지됩니다.
+
+현재 환경에서 이미지 빌드, `pip check`, GPU 인식, 작은 NF4 4bit 연산, Gradio·Gemini SDK import와 모델 캐시 쓰기를 확인했습니다. 기반 모델과 SQL 어댑터의 리비전은 설정에 고정했으며, 모델 가중치 다운로드와 실제 8B 모델의 VRAM·생성 품질 검증은 다음 개발 단계에서 진행합니다. Gemini API 키는 향후 화면에서 입력받으며 로컬 환경 파일에는 저장하지 않습니다.
 
 ## 데이터 설계
 
@@ -133,6 +177,19 @@ Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에�
 
 ## 개발 목표
 
+현재 준비한 환경을 바탕으로 다음 순서로 구현합니다.
+
+| 순서 | 작업 | 완료 기준 |
+| --- | --- | --- |
+| 1 | 엑셀 적재·가명 처리 | 입력 양식·건수·중복을 확인하고 개인정보를 제외한 DB 생성 |
+| 2 | 모델 추론 확인 | 고정한 기반 모델과 어댑터로 한국어 질문에서 SQL 생성, VRAM·지연 측정 |
+| 3 | 안전한 조회 연결 | 허용된 SQL만 읽기 전용으로 실행하고 시간·행 수 제한 적용 |
+| 4 | Gradio 화면 구현 | 질문 입력부터 결과 표·SQL·오류 안내까지 연결 |
+| 5 | 브라우저 접속 검증 | 최소 화면으로 Static Space → 조회 서버 연결 조건 확인 |
+| 6 | 선택 기능과 품질 개선 | Gemini 해설·CSV·후속 질문을 추가하고 평가 질문셋으로 정확도 확인 |
+
+모델 구동과 브라우저 연결은 실패 시 설계에 영향을 주므로, 데이터 적재를 진행하는 동안 작은 예제로 먼저 확인할 계획입니다.
+
 - [ ] 엑셀 정제·가명 처리 및 SQLite 적재
 - [ ] 로컬 모델의 4bit 구동 확인
 - [ ] 질문 → SQL 생성 → 검증 → 조회 파이프라인 구현
@@ -149,9 +206,12 @@ Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에�
 | `.gitignore` | 내부 문서(`docs/`), 원본 자료(`data/`, 엑셀 파일), 로컬 DB·모델·환경 설정·로그를 Git 추적 대상에서 제외 |
 | `.gitattributes` | 텍스트 파일의 줄바꿈을 LF로 통일하고 Windows 명령 스크립트는 CRLF 사용 |
 | `.editorconfig` | UTF-8 인코딩, 들여쓰기, 줄바꿈 등 편집 규칙 공유 |
-| `.env.example` | DB 경로, 모델 후보, 로컬 서버 설정 등 향후 환경 변수 예시 |
+| `.env.example` | DB 경로, 모델 리비전, 추론·SQL 제한, 접속 포트 등 환경 변수 예시 |
+| `compose.yaml` | 공통 GPU 개발 환경의 빌드·실행 설정 |
+| `requirements.txt` | Python 실행·GPU·개발 도구 의존성의 단일 목록 |
+| `.dockerignore` | Docker 빌드에 필요한 파일만 허용 |
 
-현재는 환경 변수 예시를 읽는 실행 코드가 없습니다. 로컬 설정이 필요한 단계에서 `.env.example`을 `.env`로 복사해 사용할 예정이며, `.env`는 Git에서 제외됩니다. Python 버전과 의존성은 모델 구동 검증 후 정할 예정입니다.
+Compose가 `.env`의 지정된 설정을 컨테이너 환경 변수로 전달합니다. 모델 추론과 SQL 제한 등 앱 설정은 향후 실행 코드에서 읽도록 구현할 예정이며, `.env`는 Git에서 제외됩니다.
 
 ## 참고 자료
 

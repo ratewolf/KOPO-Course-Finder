@@ -1,0 +1,4 @@
+# Only the dependency list is needed to build the development image.
+# Source code is mounted by Compose; private docs and data never enter the image.
+**
+!requirements.txt
