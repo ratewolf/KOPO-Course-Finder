@@ -103,7 +103,7 @@ SQLGlot 검증 → 읽기 전용 SQLite 조회
 | 데이터 적재 | openpyxl, SQLite |
 | SQL 검증 | SQLGlot |
 | 조회 화면 및 서버 | Gradio |
-| 접속용 화면 | HTML/JavaScript, `@gradio/client`, Hugging Face Static Space |
+| 공개 시연 | Gradio 공유 URL (`share=True`) |
 | 맥락 해석·질문 재작성 | Gemini API (필요한 후속 질문에만 호출) |
 | 자동 결과 안내 | Python 조건 분기와 로컬 템플릿 |
 | 개발·실행 환경 | Docker, 로컬 NVIDIA GPU 환경 |
@@ -152,7 +152,7 @@ docker compose exec app bash
 docker compose exec app python app.py
 ```
 
-실행 후 접속 주소는 `http://127.0.0.1:7860`입니다. 호스트에는 루프백 주소로만 포트를 열고, 컨테이너 내부의 Gradio는 `0.0.0.0:7860`에서 연결을 받도록 설정했습니다.
+같은 PC에서는 `http://127.0.0.1:7860`으로 접속합니다. 호스트에는 루프백 주소로만 포트를 열고, 컨테이너 내부의 Gradio는 `0.0.0.0:7860`에서 연결을 받습니다. 외부에서는 터미널의 `Running on public URL:`에 표시된 Gradio 공유 URL로 접속합니다.
 
 ### 환경 확인과 종료
 
@@ -191,7 +191,6 @@ Gemini 요청은 현재 질문, 마지막 성공한 독립 질문·조건·SQL, 
 - 실제 Gradio API와 로컬 모델에 연속 질문의 기대 재작성 문장 5개를 각각 전달해 정답 SQL과 비교했습니다. 결과는 전체 37행 → NCS 16행 → 2학기 6행 → 2024년 6행 → COUNT 6개로 일치했습니다. **Gemini가 실제로 이 문장들을 재작성했다는 검증은 아닙니다.**
 - 설치된 SDK와 모의 HTTP 전송을 사용해 조건 누적·변경, 되묻기 응답, 새 주제, 세션 분리, 표시 제한과 무관한 전체 COUNT, 403·429·500·잘못된 JSON·SQL 응답, 요청 1회 제한을 검증했습니다. 초기화 중 처리되던 결과가 다시 세션에 저장되지 않는 것도 확인했습니다.
 - 요청 스키마 수정 후 사용자가 기존 `GEMINI_MODEL`과 실제 키로 후속 질문 성공을 확인했습니다. 전체 연속 질문 평가셋 검증은 별도로 남아 있습니다. 모델명과 Docker·의존성·환경 설정은 변경하지 않았습니다.
-- Static Space 연결과 원격 배포는 아직 검증하지 않았습니다. 현재는 같은 PC의 `http://127.0.0.1:7860` 직접 접속을 사용합니다.
 
 ### 로컬 모델로 단발 질문 조회
 
@@ -284,20 +283,26 @@ docker compose exec app python -m kopo_course_finder.data data/KOPO_정수캠_20
 
 ## 배포 구상
 
-접속용 정적 화면과 모델 조회 서버를 분리하는 구성을 계획하고 있습니다.
+실습실 GPU PC의 Docker 컨테이너에서 Gradio 앱을 실행하고, `app.py`의 `share=True`로 발급된 공개 URL을 시연·제출에 사용합니다. 수업에서 전달받은 기준에 따라 이 URL을 **Gradio GUI + Hugging Face Space 배포** 항목의 결과물 링크로 제출할 계획입니다.
 
 ```text
 사용자 브라우저
     ↓
-Hugging Face Static Space
-(조회 서버 주소 입력, 접속용 화면)
-    ↓ @gradio/client
-별도 GPU 서버의 Docker 컨테이너
+https://<공유-ID>.gradio.live
+    ↓ Gradio 공유 서버의 터널
+실습실 GPU PC의 Docker 컨테이너
 (Gradio + Text-to-SQL 모델 + SQLGlot + SQLite)
     └─ 필요한 후속 질문만 Gemini API로 재작성 → 로컬 SQL 생성
 ```
 
-Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에서 실행합니다. 브라우저에서 해당 서버에 접근할 수 있어야 하며, CORS와 로컬 네트워크 접근 등 연결 조건은 후속 단계에서 확인할 예정입니다. 로컬 Gradio 화면 직접 접속은 구현·확인했습니다.
+공유 서버는 외부 요청을 실습실 PC의 앱으로 전달합니다. 모델 추론과 SQLite 조회는 실습실 PC에서 수행하며, Gradio 5.49.1의 공유 링크는 발급 후 1주일이 지나면 만료됩니다. 앱 프로세스·컨테이너·네트워크 연결이 유지되는 동안 접속할 수 있습니다. Hugging Face Spaces의 호스팅은 Space 저장소에 앱을 올려 Hugging Face 인프라에서 실행하는 방식입니다. [Gradio 공유 가이드](https://www.gradio.app/guides/sharing-your-app#sharing-demos), [Hugging Face Spaces 문서](https://huggingface.co/docs/hub/en/spaces-overview)
+
+1. DB를 준비하고 실습실 PC에서 `docker compose exec app python app.py`를 실행합니다.
+2. 모델 로딩 후 `Running on public URL:`에 표시된 `https://<공유-ID>.gradio.live` 주소를 복사합니다. 링크를 가진 사람은 앱을 열 수 있습니다.
+3. 실습실 PC와 다른 기기 또는 네트워크에서 주소를 열고, 예시 질문의 결과 표와 SQL이 표시되는지 확인합니다. 제출·발표 때 현재 링크를 사용합니다.
+4. 공유 링크가 만료되면 앱을 다시 실행합니다. 재실행 후 터미널에서 새 주소를 확인하고 제출 링크를 갱신합니다. 터널 연결이 실패하면 실습실 PC에서 `http://127.0.0.1:7860`으로 시연합니다.
+
+같은 PC에서의 Gradio 직접 접속을 확인했습니다. 공유 URL의 외부 접속과 조회는 시연 전에 검증할 예정입니다.
 
 ## 개발 목표
 
@@ -310,7 +315,7 @@ Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에�
 | 3 | 안전한 조회 연결 | 허용된 SQL만 읽기 전용으로 실행하고 시간·행 수 제한 적용 |
 | 4 | 맥락 기반 후속 질문 | Gemini 재작성·조건 누적/변경·되묻기·세션 분리·API 실패 처리 연결 |
 | 5 | Gradio 화면과 자동 안내 | 대화 기록·원문/재작성 질문·결과 표·SQL·조건 기반 안내 연결 |
-| 6 | 브라우저 접속 검증 | 최소 화면으로 Static Space → 조회 서버 연결 조건 확인 |
+| 6 | Gradio 공개 시연 검증 | 공유 URL을 외부 브라우저에서 열고 예시 질문의 결과 표·SQL 표시 확인 |
 | 7 | 정확도와 API 호출 검증 | 단발·연속 질문의 실제 결과, 전체 조건 집계, 질문별 Gemini 호출 수 확인 |
 | 선택 | CSV 다운로드 | 핵심 기능 검증 후 결과 저장 추가 |
 
@@ -323,9 +328,8 @@ Static Space에는 접속용 화면을 두고 모델과 DB는 별도 서버에�
 - [ ] 실제 Gemini 키로 모델 접근·연속 질문 재작성 품질 확인
 - [x] Gradio 화면과 조건 기반 자동 결과 안내 구현
 - [ ] 단발·연속 질문 평가셋으로 조회 정확도와 API 호출 수 검증
-- [ ] Static Space와 별도 조회 서버 연결 검증
+- [ ] Gradio 공유 URL의 외부 접속·조회 검증 및 제출 링크 확정
 - [ ] 선택 기능 구현: CSV 다운로드
-- [ ] 설치·실행 절차 및 배포 안내 추가
 
 ## 저장소 기본 설정
 
