@@ -18,6 +18,8 @@ from .query import (
 )
 from .summary import result_message
 
+BROWSE_SQL = "SELECT * FROM courses ORDER BY year DESC, semester DESC, dept, course_no"
+
 
 class InputError(ValueError):
     pass
@@ -30,15 +32,19 @@ class Answer:
     message: str
     generations: list
 
+    @property
+    def source_sql(self):
+        return self.generations[-1].sql if self.generations else BROWSE_SQL
+
 
 class QueryService:
     def __init__(self, settings, model=None):
         self.settings = settings
         self.model = model if model is not None else LocalSQLModel(settings)
 
-    def ask(self, question, *, resolved=False):
+    def ask(self, question, *, resolved=False, year=None, department=None):
         question = question.strip()
-        if not question:
+        if not question and year is None and department is None:
             raise InputError("질문을 입력해 주세요.")
         if len(question) > 2000:
             raise InputError("질문이 너무 깁니다. 2,000자 이내로 입력해 주세요.")
@@ -78,6 +84,24 @@ class QueryService:
             raise InputError(
                 f"조회 가능한 학년도: {', '.join(map(str, sorted(years)))}"
             )
+        if year is not None and year not in years:
+            raise InputError("목록에서 조회할 학년도를 선택해 주세요.")
+        if department is not None and department not in metadata["departments"]:
+            raise InputError("목록에서 조회할 학과를 선택해 주세요.")
+        sql, generations = BROWSE_SQL, []
+        if question:
+            sql, generations = self._generate_sql(question, metadata)
+        result = execute_query(
+            self.settings.database,
+            sql,
+            self.settings.max_rows,
+            self.settings.sql_seconds,
+            year=year,
+            department=department,
+        )
+        return Answer(question, result, result_message(result), generations)
+
+    def _generate_sql(self, question, metadata):
         correction = None
         generations = []
         for attempt in range(2):
@@ -94,13 +118,7 @@ class QueryService:
                 raise SQLValidationError(
                     "SQL 검증에 두 번 실패했습니다. 조건을 구체적으로 입력해 주세요."
                 ) from None
-            result = execute_query(
-                self.settings.database,
-                sql,
-                self.settings.max_rows,
-                self.settings.sql_seconds,
-            )
-            return Answer(question, result, result_message(result), generations)
+            return sql, generations
 
 
 def main():

@@ -36,7 +36,13 @@ def build_app(conversation, metadata):
             session.reset(release_key=True)
 
     def submit(
-        question, new_query, session, request: gr.Request, progress=gr.Progress()
+        question,
+        new_query,
+        session,
+        year,
+        department,
+        request: gr.Request,
+        progress=gr.Progress(),
     ):
         session = register(session, request)
         yield (
@@ -54,6 +60,8 @@ def build_app(conversation, metadata):
                 session,
                 question,
                 new_query=new_query,
+                year=year or None,
+                department=department or None,
                 on_stage=lambda text: progress(0.5, desc=text),
             )
         except Exception:
@@ -122,6 +130,8 @@ def build_app(conversation, metadata):
             "준비",
             "",
             False,
+            0,
+            "",
         )
 
     years = sorted({row["year"] for row in metadata["coverage"]})
@@ -167,8 +177,8 @@ def build_app(conversation, metadata):
             with gr.Column(elem_id="search-card", elem_classes="course-card"):
                 gr.HTML(
                     '<div class="section-head"><span>01</span><div>'
-                    "<h2>강좌에 대해 질문하기</h2>"
-                    "<p>연도, 학기, 학과를 함께 입력하면 더 정확하게 찾을 수 있어요.</p>"
+                    "<h2>강좌 찾기</h2>"
+                    "<p>학년도·학과를 선택해 조회 범위를 좁힐 수 있어요. 질문 없이 필터만으로도 조회할 수 있습니다.</p>"
                     "</div></div>",
                     elem_classes="section-heading",
                 )
@@ -210,6 +220,22 @@ def build_app(conversation, metadata):
                         label="키 상태",
                         value="키가 없습니다. 독립 질문은 조회할 수 있습니다.",
                         interactive=False,
+                        elem_classes="course-field",
+                    )
+                with gr.Row():
+                    year_filter = gr.Dropdown(
+                        choices=[("전체 학년도", 0)]
+                        + [(f"{year}학년도", year) for year in reversed(years)],
+                        value=0,
+                        label="학년도",
+                        elem_id="year-filter",
+                        elem_classes="course-field",
+                    )
+                    department_filter = gr.Dropdown(
+                        choices=[("전체 학과", "")] + metadata["departments"],
+                        value="",
+                        label="학과",
+                        elem_id="department-filter",
                         elem_classes="course-field",
                     )
                 question = gr.Textbox(
@@ -258,7 +284,7 @@ def build_app(conversation, metadata):
                 )
                 message = gr.Textbox(
                     label="결과 안내",
-                    value="질문을 입력하거나 예시 질문을 선택한 뒤 조회해 주세요.",
+                    value="학년도·학과를 선택하거나 질문을 입력한 뒤 조회해 주세요.",
                     interactive=False,
                     lines=2,
                     elem_id="result-summary",
@@ -317,7 +343,7 @@ def build_app(conversation, metadata):
         event = gr.on(
             triggers=[run.click, question.submit],
             fn=submit,
-            inputs=[question, new_query, state],
+            inputs=[question, new_query, state, year_filter, department_filter],
             outputs=outputs,
             api_name="query",
             concurrency_limit=1,
@@ -334,7 +360,7 @@ def build_app(conversation, metadata):
             triggers=[clear.click, history.clear],
             fn=reset,
             inputs=[state],
-            outputs=outputs + [question, new_query],
+            outputs=outputs + [question, new_query, year_filter, department_filter],
             cancels=[event],
             api_name=False,
             queue=False,

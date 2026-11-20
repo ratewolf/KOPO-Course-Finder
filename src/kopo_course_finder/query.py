@@ -59,7 +59,7 @@ class QueryResult:
     seconds: float
 
 
-def validate_sql(sql):
+def validate_sql(sql, *, year=None, department=None):
     if not isinstance(sql, str) or not sql.strip() or len(sql) > 16000:
         raise SQLValidationError("SQL이 비어 있거나 너무 깁니다.")
     try:
@@ -99,13 +99,13 @@ def validate_sql(sql):
         for table in tree.find_all(exp.Table):
             if table.db or table.catalog or not isinstance(table.this, exp.Identifier):
                 raise SQLValidationError("courses 테이블만 사용해 주세요.")
-        physical_tables = 0
+        physical_tables = []
         for scope in traverse_scope(tree):
             for source in scope.sources.values():
                 if isinstance(source, exp.Table):
                     if source.name.lower() != "courses":
                         raise SQLValidationError("courses 테이블만 사용해 주세요.")
-                    physical_tables += 1
+                    physical_tables.append(source)
         if not physical_tables:
             raise SQLValidationError("courses 데이터를 참조해 주세요.")
         qualify(tree.copy(), dialect="sqlite", schema=SCHEMA, infer_schema=False)
@@ -113,6 +113,23 @@ def validate_sql(sql):
             node.find_ancestor(exp.Select) is tree
             for node in tree.find_all(exp.AggFunc)
         )
+        predicates = []
+        if year is not None:
+            predicates.append(exp.column("year").eq(exp.Literal.number(int(year))))
+        if department is not None:
+            predicates.append(exp.column("dept").eq(exp.Literal.string(department)))
+        if predicates:
+            # Scope each physical source before joins, aggregation, or LIMIT.
+            for table in physical_tables:
+                source = table.copy()
+                source.set("alias", None)
+                scoped = exp.select("*").from_(source).where(*predicates).subquery()
+                alias = table.args.get("alias")
+                scoped.set(
+                    "alias",
+                    alias.copy() if alias else exp.TableAlias(this=table.this.copy()),
+                )
+                table.replace(scoped)
         return tree.sql(dialect="sqlite"), aggregate
     except SQLValidationError:
         raise
@@ -135,10 +152,12 @@ def _authorize(action, arg1, arg2, database, trigger):
     return sqlite3.SQLITE_DENY
 
 
-def execute_query(database, sql, max_rows=200, timeout_seconds=5):
+def execute_query(
+    database, sql, max_rows=200, timeout_seconds=5, *, year=None, department=None
+):
     if not 1 <= max_rows <= 200 or not 0 < timeout_seconds <= 30:
         raise ValueError("조회 제한 설정이 잘못되었습니다.")
-    normalized, aggregate = validate_sql(sql)
+    normalized, aggregate = validate_sql(sql, year=year, department=department)
     start = time.monotonic()
     connection = None
     try:

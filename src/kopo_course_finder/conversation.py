@@ -73,6 +73,7 @@ class SuccessfulQuery:
     question: str
     conditions: list[str]
     result: object
+    source_sql: str = ""
 
 
 @dataclass
@@ -118,7 +119,7 @@ def context_payload(session, question):
         payload["last_success"] = {
             "question": last.question,
             "conditions": last.conditions,
-            "sql": result.sql,
+            "sql": last.source_sql or result.sql,
             "columns": result.columns,
             "displayed_rows": len(result.rows),
             "display_truncated": result.truncated,
@@ -241,8 +242,19 @@ class ConversationService:
         self.query_service = query_service
         self.rewriter = rewriter
 
-    def ask(self, session, original, *, new_query=False, on_stage=None):
+    def ask(
+        self,
+        session,
+        original,
+        *,
+        new_query=False,
+        year=None,
+        department=None,
+        on_stage=None,
+    ):
         original = original.strip()
+        has_filters = year is not None or department is not None
+        filter_only = not original and has_filters
         revision = session.revision
         calls = 0
         question = ""
@@ -255,18 +267,18 @@ class ConversationService:
                 )
             session.history.extend(
                 [
-                    {"role": "user", "content": original},
+                    {"role": "user", "content": original or "학년도·학과 필터로 조회"},
                     {"role": "assistant", "content": message},
                 ]
             )
             session.history[:] = session.history[-40:]
             return Turn(original, question, message, status, calls, result)
 
-        if not original or len(original) > 2000:
+        if (not original and not filter_only) or len(original) > 2000:
             return Turn(
                 original[:2000],
                 "",
-                "질문을 1~2,000자로 입력해 주세요.",
+                "학년도 또는 학과를 선택하거나 질문을 1~2,000자로 입력해 주세요.",
                 "input_error",
                 0,
             )
@@ -277,7 +289,7 @@ class ConversationService:
             if not REFERENCE.search(original) and re.search(r"강좌|과목", original):
                 independent = True
         pending = bool(session.pending) and not new_query
-        needs_context = not independent or pending
+        needs_context = not filter_only and (not independent or pending)
         if needs_context:
             if new_query or (
                 (not session.last or session.fresh_context) and not session.pending
@@ -316,13 +328,34 @@ class ConversationService:
             question = original
         try:
             if on_stage:
-                on_stage("로컬 모델로 SQL을 생성하고 조회하고 있습니다.")
-            answer = self.query_service.ask(question, resolved=True)
+                on_stage(
+                    "선택한 조건으로 강좌를 조회하고 있습니다."
+                    if filter_only
+                    else "로컬 모델로 SQL을 생성하고 조회하고 있습니다."
+                )
+            answer = self.query_service.ask(
+                question, resolved=True, year=year, department=department
+            )
         except (InputError, ModelError, SQLValidationError, QueryError) as exc:
             return finish(str(exc), "query_error")
         if session.revision != revision:
             return finish("", "cancelled")
-        session.last = SuccessfulQuery(original, question, conditions, answer.result)
+        session.last = SuccessfulQuery(
+            original,
+            question or "개설강좌 목록을 보여줘.",
+            conditions,
+            answer.result,
+            # Keep previous dropdown selections out of the rewritten question.
+            source_sql=answer.source_sql if has_filters else "",
+        )
         session.pending = session.clarification = ""
         session.fresh_context = False
-        return finish(answer.message, "success", answer.result)
+        message = answer.message
+        if has_filters:
+            scope = " · ".join(
+                value
+                for value in (f"{year}학년도" if year is not None else "", department)
+                if value
+            )
+            message = f"적용한 필터 {scope}\n{message}"
+        return finish(message, "success", answer.result)
